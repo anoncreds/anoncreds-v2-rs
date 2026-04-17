@@ -7,6 +7,8 @@ use credx::credential::{ClaimSchema, CredentialSchema};
 use credx::error::Error;
 use credx::issuer::{Issuer, IssuerPublic};
 use credx::knox::bbs::BbsScheme;
+use credx::knox::ps::PsScheme;
+use credx::knox::short_group_sig_core::short_group_traits::ShortGroupSignatureScheme;
 use credx::prelude::{
     MembershipClaim, MembershipCredential, MembershipRegistry, MembershipSigningKey,
     MembershipStatement, MembershipVerificationKey, PresentationProofs,
@@ -678,25 +680,54 @@ fn test_presentation_1_credential_alter_revealed_message_fails() -> CredxResult<
     presentation.verify(&presentation_schema, &nonce)
 }
 
-#[test]
-fn blind_sign_request() {
-    setup();
-    let res = test_blind_sign_request(false);
-    assert!(res.is_ok(), "{:?}", res);
+macro_rules! gen_blind_sign_tests {
+    ($($module:ident, $scheme:ty);+ $(;)?) => {
+        $(
+            mod $module {
+                use super::*;
+
+                fn swap_commitment(
+                    good: &BlindCredentialRequest<$scheme>,
+                    other: &BlindCredentialRequest<$scheme>,
+                ) -> BlindCredentialRequest<$scheme> {
+                    let mut tampered = good.clone();
+                    tampered.blind_signature_context.commitment =
+                        other.blind_signature_context.commitment;
+                    tampered
+                }
+
+                #[test]
+                fn blind_sign_request() {
+                    setup();
+                    let res = test_blind_sign_request_generic::<$scheme, _>(false, swap_commitment);
+                    assert!(res.is_ok(), "{:?}", res);
+                }
+
+                #[test]
+                fn blind_sign_request_tamper_fails() {
+                    setup();
+                    let res = test_blind_sign_request_generic::<$scheme, _>(true, swap_commitment);
+                    assert!(
+                        matches!(res, Err(Error::InvalidSigningOperation)),
+                        "{:?}",
+                        res
+                    );
+                }
+            }
+        )+
+    };
 }
 
-#[test]
-fn blind_sign_request_tamper_fails() {
-    setup();
-    let res = test_blind_sign_request(true);
-    assert!(
-        matches!(res, Err(Error::InvalidSigningOperation)),
-        "{:?}",
-        res
-    );
-}
+gen_blind_sign_tests!(
+    bbs, BbsScheme;
+    ps,  PsScheme;
+);
 
-fn test_blind_sign_request(tamper: bool) -> CredxResult<()> {
+fn test_blind_sign_request_generic<S, F>(tamper: bool, mutate_request: F) -> CredxResult<()>
+where
+    S: ShortGroupSignatureScheme,
+    F: Fn(&BlindCredentialRequest<S>, &BlindCredentialRequest<S>) -> BlindCredentialRequest<S>,
+{
     const LABEL: &str = "Test Schema";
     const DESCRIPTION: &str = "This is a test presentation schema";
     let schema_claims = [
@@ -747,8 +778,8 @@ fn test_blind_sign_request(tamper: bool) -> CredxResult<()> {
         &schema_claims,
     )?;
 
-    let (issuer_public_1, mut issuer_1) = Issuer::<BbsScheme>::new(&cred_schema);
-    let (issuer_public_2, mut issuer_2) = Issuer::<BbsScheme>::new(&cred_schema);
+    let (issuer_public_1, mut issuer_1) = Issuer::<S>::new(&cred_schema);
+    let (issuer_public_2, mut issuer_2) = Issuer::<S>::new(&cred_schema);
 
     let blind_claims_1 = btreemap! { "link_secret".to_string() => ScalarClaim::from(Scalar::random(rand_core::OsRng)).into() };
     let blind_claims_2 = btreemap! { "link_secret".to_string() => ScalarClaim::from(Scalar::random(rand_core::OsRng)).into() };
@@ -760,9 +791,7 @@ fn test_blind_sign_request(tamper: bool) -> CredxResult<()> {
         // Use two different link_secret values to get distinct commitments.
         let (request_good, _) = BlindCredentialRequest::new(&issuer_public_1, &blind_claims_1)?;
         let (request_other, _) = BlindCredentialRequest::new(&issuer_public_1, &blind_claims_2)?;
-        let mut request_tampered = request_good.clone();
-        request_tampered.blind_signature_context.commitment =
-            request_other.blind_signature_context.commitment;
+        let request_tampered = mutate_request(&request_good, &request_other);
 
         // Attempt to sign a credential using the tampered request
         const CRED_ID_1: &str = "91742856-6eda-45fb-a709-d22ebb5ec8a5";
@@ -819,15 +848,15 @@ fn test_blind_sign_request(tamper: bool) -> CredxResult<()> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn check_link_secret_equality(
-    issuer_public_1: &IssuerPublic<BbsScheme>,
-    issuer_1: &mut Issuer<BbsScheme>,
-    issuer_public_2: &IssuerPublic<BbsScheme>,
-    issuer_2: &mut Issuer<BbsScheme>,
+fn check_link_secret_equality<S: ShortGroupSignatureScheme>(
+    issuer_public_1: &IssuerPublic<S>,
+    issuer_1: &mut Issuer<S>,
+    issuer_public_2: &IssuerPublic<S>,
+    issuer_2: &mut Issuer<S>,
     blind_claims_1: &BTreeMap<String, ClaimData>,
     blind_claims_2: &BTreeMap<String, ClaimData>,
     nonce: [u8; 16],
-) -> CredxResult<(Presentation<BbsScheme>, PresentationSchema<BbsScheme>)> {
+) -> CredxResult<(Presentation<S>, PresentationSchema<S>)> {
     // use the same link_secret to value mapping here
     let (request_1, blinder_1) = BlindCredentialRequest::new(issuer_public_1, blind_claims_1)?;
     let (request_2, blinder_2) = BlindCredentialRequest::new(issuer_public_2, blind_claims_2)?;
