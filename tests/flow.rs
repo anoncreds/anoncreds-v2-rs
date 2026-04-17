@@ -802,7 +802,8 @@ where
             "age".to_string()         => NumberClaim::from(30303).into(),
         };
 
-        return issuer_1.blind_sign_credential(&request_tampered, &claims_map)
+        return issuer_1
+            .blind_sign_credential(&request_tampered, &claims_map)
             .map(|_| ())
             .map_err(|e| e);
     }
