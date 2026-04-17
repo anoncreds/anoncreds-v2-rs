@@ -681,11 +681,22 @@ fn test_presentation_1_credential_alter_revealed_message_fails() -> CredxResult<
 #[test]
 fn blind_sign_request() {
     setup();
-    let res = test_blind_sign_request();
+    let res = test_blind_sign_request(false);
     assert!(res.is_ok(), "{:?}", res);
 }
 
-fn test_blind_sign_request() -> CredxResult<()> {
+#[test]
+fn blind_sign_request_tamper_fails() {
+    setup();
+    let res = test_blind_sign_request(true);
+    assert!(
+        matches!(res, Err(Error::InvalidSigningOperation)),
+        "{:?}",
+        res
+    );
+}
+
+fn test_blind_sign_request(tamper: bool) -> CredxResult<()> {
     const LABEL: &str = "Test Schema";
     const DESCRIPTION: &str = "This is a test presentation schema";
     let schema_claims = [
@@ -740,9 +751,32 @@ fn test_blind_sign_request() -> CredxResult<()> {
     let (issuer_public_2, mut issuer_2) = Issuer::<BbsScheme>::new(&cred_schema);
 
     let blind_claims_1 = btreemap! { "link_secret".to_string() => ScalarClaim::from(Scalar::random(rand_core::OsRng)).into() };
+    let blind_claims_2 = btreemap! { "link_secret".to_string() => ScalarClaim::from(Scalar::random(rand_core::OsRng)).into() };
 
     let mut nonce = [0u8; 16];
     rand::thread_rng().fill_bytes(&mut nonce);
+
+    if tamper {
+        // Use two different link_secret values to get distinct commitments.
+        let (request_good, _) = BlindCredentialRequest::new(&issuer_public_1, &blind_claims_1)?;
+        let (request_other, _) = BlindCredentialRequest::new(&issuer_public_1, &blind_claims_2)?;
+        let mut request_tampered = request_good.clone();
+        request_tampered.blind_signature_context.commitment =
+            request_other.blind_signature_context.commitment;
+
+        // Attempt to sign a credential using the tampered request
+        const CRED_ID_1: &str = "91742856-6eda-45fb-a709-d22ebb5ec8a5";
+        let claims_map = btreemap! {
+            "identifier".to_string() => RevocationClaim::from(CRED_ID_1).into(),
+            "name".to_string()        => HashedClaim::from("John Doe").into(),
+            "address".to_string()     => HashedClaim::from("P Sherman 42 Wallaby Way Sydney").into(),
+            "age".to_string()         => NumberClaim::from(30303).into(),
+        };
+
+        return issuer_1.blind_sign_credential(&request_tampered, &claims_map)
+            .map(|_| ())
+            .map_err(|e| e);
+    }
 
     // equal link_secret equality claims
 
@@ -765,7 +799,6 @@ fn test_blind_sign_request() -> CredxResult<()> {
 
     // link secrets with different values should not "pass"
 
-    let blind_claims_2 = btreemap! { "link_secret".to_string() => ScalarClaim::from(Scalar::random(rand_core::OsRng)).into() };
     let res = check_link_secret_equality(
         &issuer_public_1,
         &mut issuer_1,
