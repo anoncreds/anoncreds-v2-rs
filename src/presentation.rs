@@ -29,6 +29,7 @@ use crate::knox::short_group_sig_core::{HiddenMessage, ProofMessage};
 use crate::verifier::*;
 use crate::{claim::ClaimData, error::Error, statement::Statements, utils::*, CredxResult};
 use blsful::inner_types::{G1Affine, G2Affine, Scalar};
+use blsful::{Bls12381G2Impl, PublicKey, SecretKey};
 use elliptic_curve::{ff::Field, group::prime::PrimeCurveAffine};
 use indexmap::{IndexMap, IndexSet};
 use merlin::Transcript;
@@ -333,5 +334,21 @@ impl<S: ShortGroupSignatureScheme> Presentation<S> {
         }
 
         Ok(proof_messages)
+    }
+
+    pub fn decrypt_and_create_governance_proof(
+        &self,
+        stmt_id: String,
+        encryption_key: &PublicKey<Bls12381G2Impl>,
+        decryption_key: &SecretKey<Bls12381G2Impl>,
+    ) -> CredxResult<GovernanceVerificationProof> {
+        if let Some(PresentationProofs::VerifiableEncryption(verenc)) =
+            self.proofs.get(&stmt_id)
+        {
+            return verenc.create_governance_verification_proof(stmt_id, encryption_key, decryption_key);
+        }
+        return Err(crate::error::Error::General(
+            "Statement {stmt_id} has no VerifiableEncryption proof",
+        ));
     }
 }

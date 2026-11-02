@@ -10,8 +10,8 @@ use credx::knox::bbs::BbsScheme;
 use credx::knox::ps::PsScheme;
 use credx::knox::short_group_sig_core::short_group_traits::ShortGroupSignatureScheme;
 use credx::prelude::{
-    MembershipClaim, MembershipCredential, MembershipRegistry, MembershipSigningKey,
-    MembershipStatement, MembershipVerificationKey, PresentationProofs,
+    verify_governance_proof, MembershipClaim, MembershipCredential, MembershipRegistry,
+    MembershipSigningKey, MembershipStatement, MembershipVerificationKey, PresentationProofs,
     VerifiableEncryptionDecryptionStatement,
 };
 use credx::presentation::{Presentation, PresentationSchema};
@@ -387,6 +387,169 @@ fn presentation_decrypt_scalar_claim() {
     } else {
         assert!(false, "expected VerifiableEncryptionDecryption");
     }
+}
+
+#[test]
+fn presentation_decrypt_scalar_claim_and_governance_body_verifies() {
+    const CRED_ID: &str = "91742856-6eda-45fb-a709-d22ebb5ec8a5";
+    let schema_claims = [
+        ClaimSchema {
+            claim_type: ClaimType::Revocation,
+            label: "identifier".to_string(),
+            print_friendly: false,
+            validators: vec![],
+        },
+        ClaimSchema {
+            claim_type: ClaimType::Scalar,
+            label: "name".to_string(),
+            print_friendly: true,
+            validators: vec![],
+        },
+        ClaimSchema {
+            claim_type: ClaimType::Hashed,
+            label: "address".to_string(),
+            print_friendly: true,
+            validators: vec![ClaimValidator::Length {
+                min: None,
+                max: Some(u8::MAX as usize),
+            }],
+        },
+        ClaimSchema {
+            claim_type: ClaimType::Number,
+            label: "phone-number".to_string(),
+            print_friendly: true,
+            validators: vec![ClaimValidator::Range {
+                min: Some(0),
+                max: None,
+            }],
+        },
+    ];
+    let cred_schema = CredentialSchema::new(Some("Test"), Some(""), &[], &schema_claims).unwrap();
+    let (issuer_public, mut issuer) = Issuer::<BbsScheme>::new(&cred_schema);
+    let credential = issuer
+        .sign_credential(&[
+            RevocationClaim::from(CRED_ID).into(),
+            ScalarClaim::encode_str("John Doe").unwrap().into(),
+            HashedClaim::from("P Sherman 42 Wallaby Way Sydney").into(),
+            NumberClaim::from(8018881111i64).into(),
+        ])
+        .unwrap();
+
+    let sig_st = SignatureStatement {
+        disclosed: BTreeSet::new(),
+        id: random_string(16, thread_rng()),
+        issuer: issuer_public.clone(),
+    };
+    let acc_st = RevocationStatement {
+        id: random_string(16, thread_rng()),
+        reference_id: sig_st.id.clone(),
+        accumulator: issuer_public.revocation_registry,
+        verification_key: issuer_public.revocation_verifying_key,
+        claim: 0,
+    };
+    let verenc_st1 = VerifiableEncryptionStatement {
+        message_generator: G1Projective::GENERATOR,
+        encryption_key: issuer_public.verifiable_encryption_key,
+        id: random_string(16, thread_rng()),
+        reference_id: sig_st.id.clone(),
+        claim: 1,
+        allow_message_decryption: true,
+    };
+    let verenc_st2 = VerifiableEncryptionStatement {
+        message_generator: G1Projective::GENERATOR,
+        encryption_key: issuer_public.verifiable_encryption_key,
+        id: random_string(16, thread_rng()),
+        reference_id: sig_st.id.clone(),
+        claim: 3,
+        allow_message_decryption: true,
+    };
+
+    let verenc1_id = verenc_st1.id.clone();
+    let verenc2_id = verenc_st2.id.clone();
+    let mut nonce = [0u8; 16];
+    thread_rng().fill_bytes(&mut nonce);
+
+    let credentials = indexmap! { sig_st.id.clone() => credential.credential.into() };
+
+    let presentation_schema = PresentationSchema::new(&[
+        sig_st.into(),
+        acc_st.into(),
+        verenc_st1.clone().into(),
+        verenc_st2.into(),
+    ]);
+
+    let presentation = Presentation::create(&credentials, &presentation_schema, &nonce).unwrap();
+    presentation.verify(&presentation_schema, &nonce).unwrap();
+    let proof_data = serde_bare::to_vec(&presentation).unwrap();
+    let presentation: Presentation<BbsScheme> = serde_bare::from_slice(&proof_data).unwrap();
+    presentation.verify(&presentation_schema, &nonce).unwrap();
+
+    // Get one decrypted value and confirm correct
+    let name_gov_proof = presentation
+        .decrypt_and_create_governance_proof(
+            verenc1_id.clone(),
+            &issuer_public.verifiable_encryption_key,
+            &issuer.verifiable_decryption_key,
+        )
+        .unwrap();
+    verify_governance_proof(&issuer_public.verifiable_encryption_key, &presentation, &name_gov_proof).unwrap();
+
+    let decrypted_name_scalar = name_gov_proof.decrypted_scalar;
+    let decrypted_name = ScalarClaim::from(decrypted_name_scalar)
+        .decode_to_str()
+        .unwrap();
+    assert_eq!(decrypted_name.as_str(), "John Doe");
+
+    // Tamper with decrypted value and confirm that verification fails
+    let mut name_gov_proof_tampered = name_gov_proof.clone();
+    name_gov_proof_tampered.tamper_decrypted_value();
+    assert!(verify_governance_proof(
+        &issuer_public.verifiable_encryption_key,
+        &presentation,
+        &name_gov_proof_tampered
+    )
+    .is_err());
+    // Tamper with proof and confirm that verification fails
+    let mut name_gov_proof_tampered = name_gov_proof.clone();
+    name_gov_proof_tampered.tamper_chaum_pedersen_response();
+    assert!(verify_governance_proof(
+        &issuer_public.verifiable_encryption_key,
+        &presentation,
+        &name_gov_proof_tampered
+    )
+    .is_err());
+
+    // Get second decrypted value and confirm correct
+    let phone_gov_proof = presentation
+        .decrypt_and_create_governance_proof(
+            verenc2_id.clone(),
+            &issuer_public.verifiable_encryption_key,
+            &issuer.verifiable_decryption_key,
+        )
+        .unwrap();
+    verify_governance_proof(&issuer_public.verifiable_encryption_key, &presentation, &phone_gov_proof).unwrap();
+
+    let decrypted_phone_scalar = phone_gov_proof.decrypted_scalar;
+    let decrypted_phone = NumberClaim::from(decrypted_phone_scalar);
+
+    assert_eq!(decrypted_phone.value, 8018881111);
+
+    let mut phone_gov_proof_tampered = phone_gov_proof.clone();
+    phone_gov_proof_tampered.tamper_decrypted_value();
+    assert!(verify_governance_proof(
+        &issuer_public.verifiable_encryption_key,
+        &presentation,
+        &phone_gov_proof_tampered
+    )
+    .is_err());
+    let mut phone_gov_proof_tampered = phone_gov_proof.clone();
+    phone_gov_proof_tampered.tamper_decrypted_value();
+    assert!(verify_governance_proof(
+        &issuer_public.verifiable_encryption_key,
+        &presentation,
+        &phone_gov_proof_tampered
+    )
+    .is_err());
 }
 
 #[test]
