@@ -492,7 +492,12 @@ fn presentation_decrypt_scalar_claim_and_governance_body_verifies() {
             &issuer.verifiable_decryption_key,
         )
         .unwrap();
-    verify_governance_proof(&issuer_public.verifiable_encryption_key, &presentation, &name_gov_proof).unwrap();
+    verify_governance_proof(
+        &issuer_public.verifiable_encryption_key,
+        &presentation,
+        &name_gov_proof,
+    )
+    .unwrap();
 
     let decrypted_name_scalar = name_gov_proof.decrypted_scalar;
     let decrypted_name = ScalarClaim::from(decrypted_name_scalar)
@@ -527,7 +532,12 @@ fn presentation_decrypt_scalar_claim_and_governance_body_verifies() {
             &issuer.verifiable_decryption_key,
         )
         .unwrap();
-    verify_governance_proof(&issuer_public.verifiable_encryption_key, &presentation, &phone_gov_proof).unwrap();
+    verify_governance_proof(
+        &issuer_public.verifiable_encryption_key,
+        &presentation,
+        &phone_gov_proof,
+    )
+    .unwrap();
 
     let decrypted_phone_scalar = phone_gov_proof.decrypted_scalar;
     let decrypted_phone = NumberClaim::from(decrypted_phone_scalar);

@@ -342,10 +342,12 @@ impl<S: ShortGroupSignatureScheme> Presentation<S> {
         encryption_key: &PublicKey<Bls12381G2Impl>,
         decryption_key: &SecretKey<Bls12381G2Impl>,
     ) -> CredxResult<GovernanceVerificationProof> {
-        if let Some(PresentationProofs::VerifiableEncryption(verenc)) =
-            self.proofs.get(&stmt_id)
-        {
-            return verenc.create_governance_verification_proof(stmt_id, encryption_key, decryption_key);
+        if let Some(PresentationProofs::VerifiableEncryption(verenc)) = self.proofs.get(&stmt_id) {
+            return verenc.create_governance_verification_proof(
+                stmt_id,
+                encryption_key,
+                decryption_key,
+            );
         }
         return Err(crate::error::Error::General(
             "Statement {stmt_id} has no VerifiableEncryption proof",

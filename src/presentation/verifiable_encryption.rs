@@ -246,7 +246,14 @@ impl VerifiableEncryptionProof {
         let mut transcript = Transcript::new(b"verifiable_decryption_challenge");
 
         // Add all public values to transcript for challenge generation
-        Self::add_governance_transcript_values(&mut transcript, self, encryption_key, &mcap, &a, &b);
+        Self::add_governance_transcript_values(
+            &mut transcript,
+            self,
+            encryption_key,
+            &mcap,
+            &a,
+            &b,
+        );
 
         // Challenge phase
         let mut challenge_bytes = [0u8; 64];

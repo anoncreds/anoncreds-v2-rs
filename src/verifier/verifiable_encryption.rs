@@ -1,14 +1,13 @@
 use crate::error::Error;
 use crate::knox::short_group_sig_core::short_group_traits::ShortGroupSignatureScheme;
 use crate::presentation::{
-    GovernanceVerificationProof, Presentation, PresentationProofs::*,
-    VerifiableEncryptionProof,
+    GovernanceVerificationProof, Presentation, PresentationProofs::*, VerifiableEncryptionProof,
 };
-use crate::statement::{VerifiableEncryptionStatement};
+use crate::statement::VerifiableEncryptionStatement;
 use crate::verifier::ProofVerifier;
 use crate::CredxResult;
-use blsful::{Bls12381G2Impl, PublicKey};
 use blsful::inner_types::{G1Projective, Scalar};
+use blsful::{Bls12381G2Impl, PublicKey};
 use bulletproofs::{BulletproofGens, PedersenGens};
 use elliptic_curve::group::Curve;
 use merlin::Transcript;
@@ -188,7 +187,6 @@ pub fn verify_governance_proof<S: ShortGroupSignatureScheme>(
     presentation: &Presentation<S>,
     gov_proof: &GovernanceVerificationProof,
 ) -> CredxResult<()> {
-
     // Get VerifiableEncryption proof
     let proof =
         match presentation.proofs.get(&gov_proof.stmt_id) {
