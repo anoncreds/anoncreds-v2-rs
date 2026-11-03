@@ -349,8 +349,8 @@ impl<S: ShortGroupSignatureScheme> Presentation<S> {
                 decryption_key,
             );
         }
-        return Err(crate::error::Error::General(
+        Err(crate::error::Error::General(
             "Statement {stmt_id} has no VerifiableEncryption proof",
-        ));
+        ))
     }
 }

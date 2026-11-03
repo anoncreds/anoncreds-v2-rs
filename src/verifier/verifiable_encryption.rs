@@ -211,7 +211,7 @@ pub fn verify_governance_proof<S: ShortGroupSignatureScheme>(
     add_governance_transcript_values(
         &mut transcript,
         proof,
-        &encryption_key,
+        encryption_key,
         &mcap,
         &gov_proof.proof.a,
         &gov_proof.proof.b,
