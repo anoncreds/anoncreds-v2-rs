@@ -188,9 +188,9 @@ dependencies = [
 
 [[package]]
 name = "blsful"
-version = "3.0.0-pre8"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "384e5e9866cb7f830f06a6633ba998697d5a826e99e8c78376deaadd33cda7be"
+checksum = "d267776bf4742935d219fcdbdf590bed0f7e5fccdf5bd168fb30b2543a0b2b24"
 dependencies = [
  "anyhow",
  "blstrs_plus",

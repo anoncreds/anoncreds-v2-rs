@@ -15,7 +15,7 @@ version = "0.2.1"
 [dependencies]
 aes-gcm = "0.10"
 base64 = "0.22"
-blsful = "3.0.0-pre8"
+blsful = "3.0.0"
 bulletproofs = { version = "4.0.0", package = "bulletproofs-bls" }
 chrono = "0.4"
 elliptic-curve = { version = "0.13", features = ["hash2curve"] }
