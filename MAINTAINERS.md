@@ -96,7 +96,7 @@ I propose to add [maintainer github handle] as a AnonCreds project maintainer.
 
 - [list significant achievements]
 
-Here are [their past contributions on AnonCreds project](https://github.com/hyperledger/anoncreds-rs/commits?author=[user github handle]).
+Here are [their past contributions on the AnonCreds v2 project](https://github.com/anoncreds/anoncreds-v2-rs/commits?author=[user github handle]).
 
 Voting ends two weeks from today.
 
